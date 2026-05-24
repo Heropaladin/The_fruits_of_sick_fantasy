@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life RPG Tracker Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="auth-screen" class="auth-overlay">
+        <div class="auth-box">
+            <h2>ВХОД В СИСТЕМУ ЖИЗНИ</h2>
+            <input type="text" id="auth-username" placeholder="Имя героя...">
+            <input type="password" id="auth-password" placeholder="Пароль...">
+            <label class="remember-label">
+                <input type="checkbox" id="auth-remember"> Запомнить меня
+            </label>
+            <button onclick="handleAuth()">ВОЙТИ / СОЗДАТЬ</button>
+        </div>
+    </div>
+
+    <div id="skill-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <h3>НОВЫЙ НАВЫК</h3>
+            <div class="form-group">
+                <label>Название навыка:</label>
+                <input type="text" id="new-skill-title" placeholder="Например: ☕ Рисование">
+            </div>
+            <div class="form-group">
+                <label>Категория (влияет на ачивки):</label>
+                <select id="new-skill-type">
+                    <option value="edu">📚 Учеба / Языки</option>
+                    <option value="code">💻 Кодинг / Работа</option>
+                    <option value="sport">🏃 Спорт / Здоровье</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeNewSkillModal()">ОТМЕНА</button>
+                <button onclick="submitNewSkill()">СОЗДАТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="profile-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <h3>РЕДАКТИРОВАНИЕ ГЕРОЯ</h3>
+            <div class="form-group">
+                <label>Новое имя героя:</label>
+                <input type="text" id="edit-username" placeholder="Имя...">
+            </div>
+            <div class="form-group">
+                <label>Новый пароль:</label>
+                <input type="password" id="edit-password" placeholder="Пароль...">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeProfileModal()">ОТМЕНА</button>
+                <button onclick="submitProfileEdit()">СОХРАНИТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="grades-modal" class="modal-overlay hidden">
+        <div class="modal-box grades-modal-box">
+            <h3>📋 ТАБЛИЦА РАНГОВ НАВЫКА</h3>
+            <div class="grades-list" id="grades-modal-list">
+                </div>
+            <div class="modal-actions">
+                <button onclick="closeGradesModal()">ЗАКРЫТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-interface" class="main-layout hidden">
+        
+        <aside class="sidebar-profile">
+            <div class="pixel-box profile-header">
+                <h2 id="hero-name">ГЕРОЙ</h2>
+                <div id="hero-title" class="title-display">✨ Без звания</div>
+                <button onclick="openProfileModal()" class="btn-edit-profile">⚙️ Настройки</button>
+            </div>
+
+            <div id="gold-box" class="gold-display">
+                💰 <span id="gold-text">0</span> коинов
+            </div>
+
+            <div class="level-badge">LVL <span id="lvl">1</span></div>
+
+            <div class="big-avatar-container">
+                <img id="hero-img-base" src="avatar_female_1.png" alt="Hero">
+                <img id="avatar-layer-hat" class="hat-overlay hidden" src="" alt="Hat">
+            </div>
+
+            <div class="avatar-selector">
+                <div class="gender-toggle">
+                    <button id="btn-av-female" onclick="changeGender('female')">👩 ДЕВУШКА</button>
+                    <button id="btn-av-male" onclick="changeGender('male')">👨 ПАРЕНЬ</button>
+                </div>
+                <div class="sprite-pager">
+                    <button onclick="prevAvatar()">◀</button>
+                    <span id="avatar-number">Облик 1</span>
+                    <button onclick="nextAvatar()">▶</button>
+                </div>
+            </div>
+
+            <div class="pixel-box stat-bar-container">
+                <span class="bar-label">ОПЫТ: <span id="xp-text">0/100</span></span>
+                <div class="bar-border">
+                    <div id="xp-bar" class="bar-fill xp"></div>
+                </div>
+            </div>
+
+            <div class="pixel-box stats-vertical">
+                <div class="stat-item"><span>🧠 ИНТ:</span> <span id="stat-intellect">1</span></div>
+                <div class="stat-item"><span>⚡ ВОЛЯ:</span> <span id="stat-willpower">1</span></div>
+                <div class="stat-item"><span>🔋 ТОНУС:</span> <span id="stat-stamina">1</span></div>
+                <div class="stat-item"><span>💵 БОГАТСТВО:</span> <span id="stat-wealth">1</span></div>
+            </div>
+
+            <div class="pixel-box pinned-achievement-box">
+                <div style="color:#aaa; font-size:9px;">ЦЕЛЬ АЧИВКИ:</div>
+                <div id="pinned-ach-title" class="pinned-title">Нет цели</div>
+                <div class="bar-border" style="height:12px;">
+                    <div id="pinned-ach-bar" class="bar-fill ach-fill"></div>
+                </div>
+                <div id="pinned-ach-progress" class="pinned-progress">0/0 мин</div>
+            </div>
+
+            <div class="pixel-box inventory-box">
+                <h3>🎒 РЮКЗАК (ИНВЕНТАРЬ)</h3>
+                <div id="inventory-list" class="inv-grid"></div>
+            </div>
+
+            <button class="btn-reset" onclick="logOut()" style="background: #44445c; margin-top: 10px;">🚪 ВЫЙТИ ИЗ ПРОФИЛЯ</button>
+            <button class="btn-reset" onclick="resetAllProgress()">🚨 СБРОСИТЬ ВСЁ</button>
+        </aside>
+
+        <main class="game-content">
+            <nav class="main-tabs">
+                <button class="tab-main-btn active" onclick="switchMainTab('tab-skills')">📜 НАВЫКИ И УЧЕБА</button>
+                <button class="tab-main-btn" onclick="switchMainTab('tab-shop')">🏪 МАГАЗИН</button>
+                <button class="tab-main-btn" onclick="switchMainTab('tab-achievements')">🏆 ТИТУЛЫ И АЧИВКИ</button>
+            </nav>
+
+            <section id="tab-skills" class="tab-main-content pixel-box">
+                <div class="skills-header">
+                    <h3 id="toggle-skills-btn" class="collapsible-trigger">🛠️ ТВОИ НАВЫКИ <span id="collapse-arrow">▼</span></h3>
+                    <div class="skills-header-buttons">
+                        <button class="btn-info-grades" onclick="openGradesModal()">ℹ️ РАНГИ</button>
+                        <button class="btn-add-skill" onclick="openNewSkillModal()">+ СОЗДАТЬ НАВЫК</button>
+                    </div>
+                </div>
+                
+                <div id="skills-collapsible-wrapper" class="skills-wrapper">
+                    <div id="skills-container-list" class="skills-grid"></div>
+                </div>
+
+                <hr style="border: 2px solid #000; margin: 30px 0 20px 0;">
+
+                <div class="quest-creator-zone">
+                    <h3>⚔️ СОЗДАТЬ КВЕСТ</h3>
+                    <div class="form-group">
+                        <input type="text" id="task-name" placeholder="Название квеста...">
+                    </div>
+                    <div class="form-group row">
+                        <select id="task-period">
+                            <option value="day">Дневной план</option>
+                            <option value="week">Недельный рубеж</option>
+                        </select>
+                        <select id="task-stat">
+                            <option value="intellect">🧠 Интеллект</option>
+                            <option value="willpower">⚡ Сила воли</option>
+                            <option value="stamina">🔋 Тонус</option>
+                            <option value="wealth">💵 Богатство</option>
+                        </select>
+                    </div>
+                    <div class="form-group row">
+                        <span>XP:</span> <input type="number" id="task-xp" value="15">
+                        <span>💰:</span> <input type="number" id="task-gold" value="10">
+                        <button onclick="createNewTask()">ОК</button>
+                    </div>
+                </div>
+
+                <div class="quests-lists-container">
+                    <h3>⚔️ ТЕКУЩИЕ КВЕСТЫ</h3>
+                    <h4>ДНЕВНЫЕ</h4>
+                    <div id="list-day" class="list-holder"></div>
+                    <h4>НЕДЕЛЬНЫЕ</h4>
+                    <div id="list-week" class="list-holder"></div>
+                </div>
+            </section>
+
+            <section id="tab-shop" class="tab-main-content pixel-box hidden">
+                <h3>🏪 ОРУЖЕЙНАЯ И МАГАЗИН</h3>
+                <div id="shop-list" class="shop-items"></div>
+            </section>
+
+            <section id="tab-achievements" class="tab-main-content pixel-box hidden">
+                <h3>🏆 ТВОИ ДОСТИЖЕНИЯ И ЗВАНИЯ</h3>
+                <div id="achievements-list-container" class="ach-list"></div>
+            </section>
+        </main>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
