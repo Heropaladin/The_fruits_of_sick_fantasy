@@ -1,11 +1,21 @@
 // === НАСТРОЙКА ОБЛАКА SUPABASE ===
-// Замени эти строки на данные своего проекта, чтобы сохранение работало на всех устройствах!
 const SUPABASE_URL = "https://ysftfljmqsavkjoguwkt.supabase.co"; 
-const SUPABASE_ANON_KEY = "sb_publishable_tGe_9DH_YM2GZ12Fd24HMw_mc1Ike4K";
+const SUPABASE_ANON_KEY = "sb_publishable_tGe_9DH_YM2GZ12Fd24HMw_mc1Ike4K"; 
+// Примечание: Если после исправления кнопка нажмётся, но выдаст ошибку сети, 
+// перепроверь в панели Supabase ключ anon/public. Он должен начинаться на eyJ...
 
-let supabase = null;
+let supabaseClient = null;
+
 if (SUPABASE_URL && !SUPABASE_URL.includes("your-project-id")) {
-    supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    try {
+        if (typeof supabase !== 'undefined' && typeof supabase.createClient === 'function') {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } else if (typeof Supabase !== 'undefined' && typeof Supabase.createClient === 'function') {
+            supabaseClient = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+    } catch (e) {
+        console.error("Ошибка инициализации клиента Supabase:", e);
+    }
 }
 
 // Конфигурация динамических званий по минутам
@@ -72,7 +82,6 @@ const itemsDatabase = {
     }
 };
 
-// Исправленная мемная ачивка: привязывается строго к ID навыка "eng_lang"
 const achievementsDatabase = {
     eng_100: { 
         id: "eng_100", 
@@ -96,11 +105,16 @@ window.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('auth-password').value = parsed.password;
             document.getElementById('auth-remember').checked = true;
             
-            if (supabase) {
-                const { data, error } = await supabase.from('user_profiles').select('state').eq('username', rememberedUser).single();
-                if (data && !error) {
-                    gameState = data.state;
-                } else {
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.from('user_profiles').select('state').eq('username', rememberedUser).single();
+                    if (data && !error) {
+                        gameState = data.state;
+                    } else {
+                        gameState = parsed.state;
+                    }
+                } catch (e) {
+                    console.error("Ошибка авто-входа через Supabase:", e);
                     gameState = parsed.state;
                 }
             } else {
@@ -123,15 +137,21 @@ async function handleAuth() {
     
     if (!userField || !passField) return alert("Введите имя и пароль!");
     
-    if (supabase) {
-        const { data, error } = await supabase.from('user_profiles').select('*').eq('username', userField).single();
-        
-        if (data) {
-            if (data.password !== passField) return alert("Неверный пароль героя!");
-            gameState = data.state;
-        } else {
-            gameState = createInitialState(userField);
-            await supabase.from('user_profiles').insert({ username: userField, password: passField, state: gameState });
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient.from('user_profiles').select('*').eq('username', userField).single();
+            
+            if (data) {
+                if (data.password !== passField) return alert("Неверный пароль героя!");
+                gameState = data.state;
+            } else {
+                gameState = createInitialState(userField);
+                await supabaseClient.from('user_profiles').insert({ username: userField, password: passField, state: gameState });
+            }
+        } catch (e) {
+            console.error("Ошибка авторизации Supabase:", e);
+            alert("Ошибка базы данных! Проверь консоль (F12) или корректность ключа ANON.");
+            return;
         }
     } else {
         const savedData = localStorage.getItem(`life_rpg_auth_${userField}`);
@@ -177,8 +197,12 @@ async function save() {
     
     localStorage.setItem(`life_rpg_auth_${gameState.user}`, JSON.stringify(authData));
     
-    if (supabase) {
-        await supabase.from('user_profiles').update({ state: gameState }).eq('username', gameState.user);
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('user_profiles').update({ state: gameState }).eq('username', gameState.user);
+        } catch (e) {
+            console.error("Ошибка сохранения в облако:", e);
+        }
     }
 }
 
@@ -214,9 +238,13 @@ async function submitProfileEdit() {
     const newPass = document.getElementById('edit-password').value.trim();
     if (!newName || !newPass) return alert("Поля не могут быть пустыми!");
     
-    if (supabase) {
+    if (supabaseClient) {
         alert("В облачном режиме имя аккаунта привязано к базе данных. Смена пароля сохранена.");
-        await supabase.from('user_profiles').update({ password: newPass }).eq('username', gameState.user);
+        try {
+            await supabaseClient.from('user_profiles').update({ password: newPass }).eq('username', gameState.user);
+        } catch (e) {
+            console.error("Ошибка обновления пароля в Supabase:", e);
+        }
     } else {
         localStorage.removeItem(`life_rpg_auth_${gameState.user}`);
         gameState.user = newName;
@@ -350,7 +378,6 @@ function initDragAndDrop() {
     });
 }
 
-// Поиск позиции для вставки карточки при переносе
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll('.skill-card:not(.dragging)')];
     return draggableElements.reduce((closest, child) => {
@@ -409,7 +436,6 @@ function buyItem(itemId) {
     save();
 }
 
-// Экипировка шапки
 function toggleEquip(itemId) {
     gameState.equippedHead = (gameState.equippedHead === itemId) ? null : itemId;
     renderAll();
@@ -483,7 +509,9 @@ function switchMainTab(tabId) {
     document.querySelectorAll('.tab-main-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-main-btn').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.remove('hidden');
-    event.currentTarget.classList.add('active');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+    }
 }
 
 function resetAllProgress() {
@@ -542,31 +570,32 @@ function renderAll() {
     }
 
     const skillsContainer = document.getElementById('skills-container-list');
-    skillsContainer.innerHTML = '';
-    gameState.skills.forEach(skill => {
-        const grade = getSkillStatusAndGrade(skill.totalMinutes);
-        const isThisTimerRunning = (activeTimerId === skill.id);
-        
-        const card = document.createElement('div');
-        card.className = 'skill-card';
-        card.setAttribute('data-id', skill.id);
-        card.innerHTML = `
-            <button class="btn-delete-skill" onclick="deleteSkill('${skill.id}', event)">❌</button>
-            <div class="skill-meta" onclick="toggleSkillTimer('${skill.id}')">
-                <span class="skill-title">${skill.title}</span>
-                <span class="skill-status">${grade}</span>
-            </div>
-            <div class="skill-timer-zone">
-                <span class="skill-time-val">Пройдено: ${skill.totalMinutes} мин ${isThisTimerRunning ? ` (${secondsCountdown}с)` : ''}</span>
-                <button class="btn-timer ${isThisTimerRunning ? 'active' : ''}" onclick="toggleSkillTimer('${skill.id}')">
-                    ${isThisTimerRunning ? '⏹️ СТОП' : '▶️ СТАРТ'}
-                </button>
-            </div>
-        `;
-        skillsContainer.appendChild(card);
-    });
+    if (skillsContainer) {
+        skillsContainer.innerHTML = '';
+        gameState.skills.forEach(skill => {
+            const grade = getSkillStatusAndGrade(skill.totalMinutes);
+            const isThisTimerRunning = (activeTimerId === skill.id);
+            
+            const card = document.createElement('div');
+            card.className = 'skill-card';
+            card.setAttribute('data-id', skill.id);
+            card.innerHTML = `
+                <button class="btn-delete-skill" onclick="deleteSkill('${skill.id}', event)">❌</button>
+                <div class="skill-meta" onclick="toggleSkillTimer('${skill.id}')">
+                    <span class="skill-title">${skill.title}</span>
+                    <span class="skill-status">${grade}</span>
+                </div>
+                <div class="skill-timer-zone">
+                    <span class="skill-time-val">Пройдено: ${skill.totalMinutes} мин ${isThisTimerRunning ? ` (${secondsCountdown}с)` : ''}</span>
+                    <button class="btn-timer ${isThisTimerRunning ? 'active' : ''}" onclick="toggleSkillTimer('${skill.id}')">
+                        ${isThisTimerRunning ? '⏹️ СТОП' : '▶️ СТАРТ'}
+                    </button>
+                </div>
+            `;
+            skillsContainer.appendChild(card);
+        });
+    }
 
-    // РЕНДЕР ЦЕЛИ АЧИВКИ НА ПАНЕЛИ ПРОФИЛЯ
     const achPinned = achievementsDatabase[gameState.pinnedAchId];
     if (achPinned) {
         document.getElementById('pinned-ach-title').innerText = achPinned.title;
@@ -582,7 +611,6 @@ function renderAll() {
         document.getElementById('pinned-ach-bar').style.width = `${Math.min(pct, 100)}%`;
     }
 
-    // РЕНДЕР ВКЛАДКИ АЧИВОК (Починили отображение в основном меню)
     const achTabContainer = document.getElementById('achievements-list-container');
     if (achTabContainer) {
         achTabContainer.innerHTML = '';
@@ -622,50 +650,56 @@ function renderAll() {
     }
 
     const shopBox = document.getElementById('shop-list');
-    shopBox.innerHTML = '';
-    Object.keys(itemsDatabase).forEach(key => {
-        const item = itemsDatabase[key];
-        if (!gameState.inventory.includes(key)) {
-            const card = document.createElement('div');
-            card.className = 'shop-item-card';
-            card.innerHTML = `
-                <div class="item-info">
-                    <span class="item-title">${item.name}</span>
-                    <span class="item-rules">ИНТ ${item.reqVal}+ | XP +${item.bonus*100}%</span>
-                </div>
-                <button class="btn-buy" onclick="buyItem('${item.id}')">${item.price} 💰</button>
-            `;
-            shopBox.appendChild(card);
-        }
-    });
+    if (shopBox) {
+        shopBox.innerHTML = '';
+        Object.keys(itemsDatabase).forEach(key => {
+            const item = itemsDatabase[key];
+            if (!gameState.inventory.includes(key)) {
+                const card = document.createElement('div');
+                card.className = 'shop-item-card';
+                card.innerHTML = `
+                    <div class="item-info">
+                        <span class="item-title">${item.name}</span>
+                        <span class="item-rules">ИНТ ${item.reqVal}+ | XP +${item.bonus*100}%</span>
+                    </div>
+                    <button class="btn-buy" onclick="buyItem('${item.id}')">${item.price} 💰</button>
+                `;
+                shopBox.appendChild(card);
+            }
+        });
+    }
 
     const invBox = document.getElementById('inventory-list');
-    invBox.innerHTML = '';
-    gameState.inventory.forEach(itemId => {
-        const item = itemsDatabase[itemId];
-        const isEquipped = gameState.equippedHead === itemId;
-        const row = document.createElement('div');
-        row.className = 'inv-item-row';
-        row.innerHTML = `<span>${item.name}</span><button class="btn-use ${isEquipped ? 'active' : ''}" onclick="toggleEquip('${itemId}')">${isEquipped ? 'СНЯТЬ' : 'НАДЕТЬ'}</button>`;
-        invBox.appendChild(row);
-    });
-    if (gameState.inventory.length === 0) invBox.innerHTML = '<div style="font-size:9px;color:#666;">Пусто</div>';
+    if (invBox) {
+        invBox.innerHTML = '';
+        gameState.inventory.forEach(itemId => {
+            const item = itemsDatabase[itemId];
+            const isEquipped = gameState.equippedHead === itemId;
+            const row = document.createElement('div');
+            row.className = 'inv-item-row';
+            row.innerHTML = `<span>${item.name}</span><button class="btn-use ${isEquipped ? 'active' : ''}" onclick="toggleEquip('${itemId}')">${isEquipped ? 'СНЯТЬ' : 'НАДЕТЬ'}</button>`;
+            invBox.appendChild(row);
+        });
+        if (gameState.inventory.length === 0) invBox.innerHTML = '<div style="font-size:9px;color:#666;">Пусто</div>';
+    }
 
     const dayList = document.getElementById('list-day');
     const weekList = document.getElementById('list-week');
-    dayList.innerHTML = ''; weekList.innerHTML = '';
-    gameState.customTasks.forEach(task => {
-        const card = document.createElement('div');
-        card.className = 'quest-card';
-        let icon = task.stat === 'intellect' ? '🧠' : task.stat === 'willpower' ? '⚡' : task.stat === 'stamina' ? '🔋' : '💰';
-        card.innerHTML = `
-            <div>
-                <div class="quest-title">${task.name}</div>
-                <div class="quest-reward">+${task.xp}XP / +${task.gold}💰 / +1 ${icon}</div>
-            </div>
-            <div class="quest-actions"><button class="btn-complete" onclick="completeTask(${task.id})">ОК</button><button class="btn-delete" onclick="deleteTask(${task.id})">Х</button></div>
-        `;
-        if (task.period === 'day') dayList.appendChild(card);
-        else weekList.appendChild(card);
-    });
+    if (dayList && weekList) {
+        dayList.innerHTML = ''; weekList.innerHTML = '';
+        gameState.customTasks.forEach(task => {
+            const card = document.createElement('div');
+            card.className = 'quest-card';
+            let icon = task.stat === 'intellect' ? '🧠' : task.stat === 'willpower' ? '⚡' : task.stat === 'stamina' ? '🔋' : '💰';
+            card.innerHTML = `
+                <div>
+                    <div class="quest-title">${task.name}</div>
+                    <div class="quest-reward">+${task.xp}XP / +${task.gold}💰 / +1 ${icon}</div>
+                </div>
+                <div class="quest-actions"><button class="btn-complete" onclick="completeTask(${task.id})">ОК</button><button class="btn-delete" onclick="deleteTask(${task.id})">Х</button></div>
+            `;
+            if (task.period === 'day') dayList.appendChild(card);
+            else weekList.appendChild(card);
+        });
+    }
 }
