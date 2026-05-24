@@ -197,8 +197,15 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
         if (supabaseClient && rememberedUser) {
             try {
-                const { data } = await supabaseClient.from('user_profiles').select('state').eq('username', rememberedUser).maybeSingle();
-                if (data?.state) gameState = parseGameState(data.state, rememberedUser);
+                const savedPass = document.getElementById('auth-password')?.value?.trim() || '';
+                if (savedPass) {
+                    const rpcAuto = await tryRpcLogin(rememberedUser, savedPass);
+                    if (rpcAuto?.success) gameState = rpcAuto.state;
+                }
+                if (!gameState?.user) {
+                    const { data } = await supabaseClient.from('user_profiles').select('state').eq('username', rememberedUser).maybeSingle();
+                    if (data?.state) gameState = parseGameState(data.state, rememberedUser);
+                }
             } catch (e) { console.error("Ошибка авто-входа через Supabase:", e); }
         }
         if (!gameState || !gameState.user) gameState = createInitialState(rememberedUser);
@@ -284,9 +291,54 @@ function loadLocalAuth(username, password) {
     return { success: false };
 }
 
-async function authenticateUser(username, password) {
-    if (!supabaseClient) return loadLocalAuth(username, password);
+async function tryRpcLogin(username, password) {
+    try {
+        const { data, error } = await supabaseClient.rpc('login', {
+            p_username: username,
+            p_password: password
+        });
+        if (error) {
+            if (error.message?.includes('wrong_password')) {
+                return { success: false, message: 'Неверный пароль героя!' };
+            }
+            if (error.code === '42883' || error.message?.includes('Could not find the function')) {
+                return null;
+            }
+            console.warn('RPC login:', error);
+            return null;
+        }
+        if (data) return { success: true, state: parseGameState(data, username) };
+        return null;
+    } catch (e) {
+        console.warn('RPC login failed:', e);
+        return null;
+    }
+}
 
+async function tryRpcRegister(username, password, initialState) {
+    try {
+        const { data, error } = await supabaseClient.rpc('register', {
+            p_username: username,
+            p_password: password,
+            p_state: initialState
+        });
+        if (error) {
+            if (error.code === '42883' || error.message?.includes('Could not find the function')) {
+                return null;
+            }
+            console.warn('RPC register:', error);
+            return null;
+        }
+        if (data === true) return { success: true, state: initialState };
+        if (data === false) return { success: false, duplicate: true };
+        return null;
+    } catch (e) {
+        console.warn('RPC register failed:', e);
+        return null;
+    }
+}
+
+async function fetchProfileFromTable(username, password) {
     const { data, error } = await supabaseClient
         .from('user_profiles')
         .select('*')
@@ -296,15 +348,22 @@ async function authenticateUser(username, password) {
     if (error && error.code !== 'PGRST116') {
         console.warn('Supabase select:', error);
     }
-
-    if (data) {
-        if (data.password !== password) {
-            return { success: false, message: 'Неверный пароль героя!' };
-        }
-        return { success: true, state: parseGameState(data.state, username) };
+    if (!data) return null;
+    if (data.password !== password) {
+        return { success: false, message: 'Неверный пароль героя!' };
     }
+    return { success: true, state: parseGameState(data.state, username) };
+}
 
-    // Облако не вернуло строку — сначала локальное сохранение (аккаунт мог уже существовать)
+async function authenticateUser(username, password) {
+    if (!supabaseClient) return loadLocalAuth(username, password);
+
+    const rpcLogin = await tryRpcLogin(username, password);
+    if (rpcLogin?.success || rpcLogin?.message) return rpcLogin;
+
+    const fromTable = await fetchProfileFromTable(username, password);
+    if (fromTable?.success || fromTable?.message) return fromTable;
+
     const localFirst = loadLocalAuth(username, password);
     if (localFirst.success) return localFirst;
     if (localFirst.wrongPassword) {
@@ -313,6 +372,14 @@ async function authenticateUser(username, password) {
     if (localFirst.message) return { success: false, message: localFirst.message };
 
     const initialState = createInitialState(username);
+
+    const rpcReg = await tryRpcRegister(username, password, initialState);
+    if (rpcReg?.success) return rpcReg;
+    if (rpcReg?.duplicate) {
+        const rpcAgain = await tryRpcLogin(username, password);
+        if (rpcAgain?.success || rpcAgain?.message) return rpcAgain;
+    }
+
     const { error: insertError } = await supabaseClient.from('user_profiles').insert({
         username,
         password,
@@ -324,18 +391,11 @@ async function authenticateUser(username, password) {
     }
 
     if (isDuplicateKeyError(insertError)) {
-        const { data: retryData } = await supabaseClient
-            .from('user_profiles')
-            .select('*')
-            .eq('username', username)
-            .maybeSingle();
+        const rpcAfterDup = await tryRpcLogin(username, password);
+        if (rpcAfterDup?.success || rpcAfterDup?.message) return rpcAfterDup;
 
-        if (retryData) {
-            if (retryData.password !== password) {
-                return { success: false, message: 'Неверный пароль героя!' };
-            }
-            return { success: true, state: parseGameState(retryData.state, username) };
-        }
+        const retryTable = await fetchProfileFromTable(username, password);
+        if (retryTable?.success || retryTable?.message) return retryTable;
 
         const localAgain = loadLocalAuth(username, password);
         if (localAgain.success) return localAgain;
@@ -345,7 +405,7 @@ async function authenticateUser(username, password) {
 
         return {
             success: false,
-            message: 'Аккаунт уже есть в базе, но сайт не может его прочитать. Войдите с того же браузера, где уже играли, или в Supabase включите SELECT для таблицы user_profiles (RLS).'
+            message: 'Аккаунт уже есть, но облако не отдаёт данные. Один раз выполни SQL из файла supabase/setup_rls.sql в Supabase (SQL Editor), затем обнови страницу.'
         };
     }
 
