@@ -283,3 +283,211 @@ input[type="number"] { width: 85px; text-align: center; }
     padding: 10px 4px;
     line-height: 1.5;
 }
+
+/* === Адаптив: планшет и телефон === */
+@media (max-width: 900px) {
+    body {
+        padding: 12px;
+        overflow-x: hidden;
+    }
+
+    .main-layout {
+        flex-direction: column;
+        max-width: 100%;
+        gap: 16px;
+    }
+
+    .sidebar-profile {
+        width: 100%;
+        max-width: 100%;
+        position: static;
+    }
+
+    .game-content {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    body {
+        padding: 8px;
+    }
+
+    .main-layout {
+        gap: 12px;
+    }
+
+    .pixel-box {
+        padding: 12px;
+    }
+
+    h2 { font-size: 14px; }
+    h3, h4 { font-size: 11px; line-height: 1.6; }
+
+    .auth-box,
+    .modal-box {
+        width: calc(100vw - 24px);
+        max-width: 420px;
+        padding: 16px;
+        gap: 14px;
+    }
+
+    .grades-modal-box {
+        width: calc(100vw - 24px);
+        max-width: 100%;
+    }
+
+    .big-avatar-container {
+        height: min(52vw, 300px);
+        min-height: 220px;
+    }
+
+    .gold-display {
+        font-size: 11px;
+        padding: 10px;
+        line-height: 1.5;
+    }
+
+    .main-tabs {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .tab-main-btn {
+        flex: 1 1 100%;
+        font-size: 9px;
+        padding: 12px 10px;
+        line-height: 1.5;
+        white-space: normal;
+        text-align: center;
+    }
+
+    .skills-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .skills-header-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .skills-header-buttons .btn-info-grades,
+    .skills-header-buttons .btn-add-skill {
+        flex: 1 1 calc(50% - 4px);
+        font-size: 8px;
+        padding: 10px 6px;
+        line-height: 1.4;
+        white-space: normal;
+        text-align: center;
+    }
+
+    .skills-hint-desktop {
+        display: none;
+    }
+
+    .collapsible-trigger {
+        font-size: 10px;
+        line-height: 1.6;
+        flex-wrap: wrap;
+    }
+
+    .skill-top-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .skill-status {
+        max-width: 100%;
+        font-size: 8px;
+    }
+
+    .skill-title {
+        font-size: 11px;
+    }
+
+    .form-group.row {
+        flex-wrap: wrap;
+        align-items: stretch;
+    }
+
+    .form-group.row select {
+        flex: 1 1 calc(50% - 4px);
+        min-width: 120px;
+    }
+
+    .form-group.row input[type="number"] {
+        width: auto;
+        flex: 1;
+        min-width: 56px;
+    }
+
+    .form-group.row button {
+        flex: 1 1 100%;
+        margin-top: 4px;
+    }
+
+    .quest-card,
+    .shop-item-card {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .quest-actions,
+    .shop-item-card button {
+        align-self: flex-end;
+    }
+
+    .quest-title {
+        font-size: 11px;
+    }
+
+    .quest-reward {
+        font-size: 10px;
+    }
+
+    .gender-toggle button {
+        font-size: 8px;
+        padding: 10px 4px;
+        line-height: 1.4;
+    }
+
+    .sprite-pager {
+        font-size: 9px;
+        gap: 6px;
+    }
+
+    .pinned-title {
+        white-space: normal;
+        line-height: 1.4;
+    }
+
+    button {
+        font-size: 9px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    select {
+        font-size: 10px;
+        padding: 12px 10px;
+    }
+}
+
+@media (max-width: 380px) {
+    .tab-main-btn {
+        font-size: 8px;
+        padding: 10px 6px;
+    }
+
+    .stat-item {
+        font-size: 9px;
+        padding: 8px;
+    }
+}
