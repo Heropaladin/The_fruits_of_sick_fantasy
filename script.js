@@ -1,4 +1,14 @@
-// Конфигурация всех званий по минутам обучения
+// === НАСТРОЙКА ОБЛАКА SUPABASE ===
+// Замени эти строки на данные своего проекта, чтобы сохранение работало на всех устройствах!
+const SUPABASE_URL = "https://ysftfljmqsavkjoguwkt.supabase.co"; 
+const SUPABASE_ANON_KEY = "sb_publishable_tGe_9DH_YM2GZ12Fd24HMw_mc1Ike4K";
+
+let supabase = null;
+if (SUPABASE_URL && !SUPABASE_URL.includes("your-project-id")) {
+    supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+// Конфигурация динамических званий по минутам
 const skillGradesConfig = [
     { req: 0, text: "🙊 Нечленораздельный студент" },
     { req: 10, text: "📝 Обычный Студент" },
@@ -6,7 +16,7 @@ const skillGradesConfig = [
     { req: 60, text: "🗣️ Выпускник Школы" },
     { req: 120, text: "📚 Переводчик Мемов" },
     { req: 240, text: "📜 Магистр Грамматики" },
-    { req: 480, text: "🧠 Живой Словать" },
+    { req: 480, text: "🧠 Живой Словарь" },
     { req: 960, text: "🕵️ Шпион МИ-6" },
     { req: 1920, text: "👑 Профессор Оксфорда" },
     { req: 3840, text: "🧙‍♂️ Высший Магистр Языка" },
@@ -14,7 +24,7 @@ const skillGradesConfig = [
     { req: 15360, text: "👾 Божественный Кодер-Полиглот" }
 ];
 
-// Дефолтное состояние для новых игроков
+// Базовый шаблон нового игрока
 function createInitialState(username) {
     return {
         user: username,
@@ -47,7 +57,6 @@ const avatarsConfig = {
     male: ["avatar_male_1.png"]
 };
 
-// Ювелирно выверенные координаты шапок под твой пиксельный аватар
 const itemsDatabase = {
     ragged_hat: { 
         id: "ragged_hat", name: "🎓 Рваный Колпак", bonus: 0.02, src: "hat_ragged.png", price: 15, reqStat: "intellect", reqVal: 0,
@@ -63,52 +72,76 @@ const itemsDatabase = {
     }
 };
 
+// Исправленная мемная ачивка: привязывается строго к ID навыка "eng_lang"
 const achievementsDatabase = {
-    eng_100: { id: "eng_100", title: "Лондон Из Зе Кэпитал", desc: "Проработать 100 минут в навыках категории 'Учеба'", targetType: "edu", targetMinutes: 100, rewardTitle: "👑 Профессор Оксфорда" }
+    eng_100: { 
+        id: "eng_100", 
+        title: "Ландон из зе грейт кэпитал", 
+        desc: "Школьный мем ожил! Налетать 100 минут чисто в навыке 'Английский язык'.", 
+        targetSkillId: "eng_lang", 
+        targetMinutes: 100, 
+        rewardTitle: "🇬🇧 Ландон из зе грейт кэпитал" 
+    }
 };
 
-// Инициализация при загрузке
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('toggle-skills-btn').addEventListener('click', toggleSkillsPanel);
 
     const rememberedUser = localStorage.getItem('life_rpg_remembered_user');
     if (rememberedUser) {
-        const savedData = localStorage.getItem(`life_rpg_auth_${rememberedUser}`);
+        let savedData = localStorage.getItem(`life_rpg_auth_${rememberedUser}`);
         if (savedData) {
             let parsed = JSON.parse(savedData);
-            gameState = parsed.state;
-            
             document.getElementById('auth-username').value = rememberedUser;
             document.getElementById('auth-password').value = parsed.password;
             document.getElementById('auth-remember').checked = true;
+            
+            if (supabase) {
+                const { data, error } = await supabase.from('user_profiles').select('state').eq('username', rememberedUser).single();
+                if (data && !error) {
+                    gameState = data.state;
+                } else {
+                    gameState = parsed.state;
+                }
+            } else {
+                gameState = parsed.state;
+            }
             
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('game-interface').classList.remove('hidden');
             checkSkillsDegradation();
             renderAll();
             initDragAndDrop();
-            return;
         }
     }
 });
 
-// Исправленная авторизация без перезаписи чужих стейтов
-function handleAuth() {
+async function handleAuth() {
     const userField = document.getElementById('auth-username').value.trim();
     const passField = document.getElementById('auth-password').value.trim();
     const rememberMe = document.getElementById('auth-remember').checked;
     
     if (!userField || !passField) return alert("Введите имя и пароль!");
     
-    const saveKey = `life_rpg_auth_${userField}`;
-    const savedData = localStorage.getItem(saveKey);
-    
-    if (savedData) {
-        let parsed = JSON.parse(savedData);
-        if (parsed.password !== passField) return alert("Неверный пароль героя!");
-        gameState = parsed.state;
+    if (supabase) {
+        const { data, error } = await supabase.from('user_profiles').select('*').eq('username', userField).single();
+        
+        if (data) {
+            if (data.password !== passField) return alert("Неверный пароль героя!");
+            gameState = data.state;
+        } else {
+            gameState = createInitialState(userField);
+            await supabase.from('user_profiles').insert({ username: userField, password: passField, state: gameState });
+        }
     } else {
-        gameState = createInitialState(userField);
+        const savedData = localStorage.getItem(`life_rpg_auth_${userField}`);
+        if (savedData) {
+            let parsed = JSON.parse(savedData);
+            if (parsed.password !== passField) return alert("Неверный пароль героя!");
+            gameState = parsed.state;
+        } else {
+            gameState = createInitialState(userField);
+        }
     }
     
     if (rememberMe) {
@@ -137,82 +170,63 @@ function logOut() {
     document.getElementById('auth-screen').classList.remove('hidden');
 }
 
-function save() {
+async function save() {
     if (!gameState.user) return;
     const currentPassword = document.getElementById('auth-password').value.trim() || "12345";
-    const authData = {
-        password: currentPassword,
-        state: gameState
-    };
+    const authData = { password: currentPassword, state: gameState };
+    
     localStorage.setItem(`life_rpg_auth_${gameState.user}`, JSON.stringify(authData));
+    
+    if (supabase) {
+        await supabase.from('user_profiles').update({ state: gameState }).eq('username', gameState.user);
+    }
 }
 
 function toggleSkillsPanel() {
     gameState.skillsCollapsed = !gameState.skillsCollapsed;
-    const wrapper = document.getElementById('skills-collapsible-wrapper');
-    const arrow = document.getElementById('collapse-arrow');
-    
-    if (gameState.skillsCollapsed) {
-        wrapper.classList.add('collapsed');
-        arrow.innerText = '►';
-    } else {
-        wrapper.classList.remove('collapsed');
-        arrow.innerText = '▼';
-    }
+    renderAll();
     save();
 }
 
-// Модалка просмотра рангов
 function openGradesModal() {
     const listContainer = document.getElementById('grades-modal-list');
     listContainer.innerHTML = '';
-    
     skillGradesConfig.forEach(g => {
         const row = document.createElement('div');
         row.className = 'grade-row-info';
-        
         let timeText = g.req === 0 ? "Старт" : `${g.req} мин (${(g.req/60).toFixed(1)}ч)`;
         row.innerHTML = `<span>${g.text}</span><span>${timeText}</span>`;
         listContainer.appendChild(row);
     });
-    
     document.getElementById('grades-modal').classList.remove('hidden');
 }
 
-function closeGradesModal() {
-    document.getElementById('grades-modal').classList.add('hidden');
-}
-
+function closeGradesModal() { document.getElementById('grades-modal').classList.add('hidden'); }
 function openProfileModal() {
     document.getElementById('edit-username').value = gameState.user;
     document.getElementById('edit-password').value = document.getElementById('auth-password').value;
     document.getElementById('profile-modal').classList.remove('hidden');
 }
+function closeProfileModal() { document.getElementById('profile-modal').classList.add('hidden'); }
 
-function closeProfileModal() {
-    document.getElementById('profile-modal').classList.add('hidden');
-}
-
-function submitProfileEdit() {
+async function submitProfileEdit() {
     const newName = document.getElementById('edit-username').value.trim();
     const newPass = document.getElementById('edit-password').value.trim();
-    
     if (!newName || !newPass) return alert("Поля не могут быть пустыми!");
     
-    localStorage.removeItem(`life_rpg_auth_${gameState.user}`);
-    
-    gameState.user = newName;
-    document.getElementById('auth-username').value = newName;
-    document.getElementById('auth-password').value = newPass;
-    
-    if (localStorage.getItem('life_rpg_remembered_user')) {
-        localStorage.setItem('life_rpg_remembered_user', newName);
+    if (supabase) {
+        alert("В облачном режиме имя аккаунта привязано к базе данных. Смена пароля сохранена.");
+        await supabase.from('user_profiles').update({ password: newPass }).eq('username', gameState.user);
+    } else {
+        localStorage.removeItem(`life_rpg_auth_${gameState.user}`);
+        gameState.user = newName;
     }
     
+    document.getElementById('auth-username').value = newName;
+    document.getElementById('auth-password').value = newPass;
     closeProfileModal();
     renderAll();
     save();
-    alert("Профиль успешно обновлен!");
 }
 
 function deleteSkill(skillId, event) {
@@ -235,7 +249,6 @@ function closeNewSkillModal() { document.getElementById('skill-modal').classList
 function submitNewSkill() {
     const titleInput = document.getElementById('new-skill-title').value.trim();
     const typeSelect = document.getElementById('new-skill-type').value;
-    
     if (!titleInput) return alert("Введите название навыка!");
     
     const newSkill = {
@@ -274,6 +287,7 @@ function toggleSkillTimer(skillId) {
                 skill.lastActivity = Date.now(); 
                 secondsCountdown = 60;
                 addXP(2, 'intellect');
+                checkAchievementsAutoUnlock(); 
             }
             renderAll();
             save();
@@ -283,8 +297,29 @@ function toggleSkillTimer(skillId) {
     save();
 }
 
+function checkAchievementsAutoUnlock() {
+    Object.keys(achievementsDatabase).forEach(key => {
+        const ach = achievementsDatabase[key];
+        if (gameState.unlockedAchievements.includes(ach.id)) return;
+
+        let currentMinutes = 0;
+        if (ach.targetSkillId) {
+            const targetSkill = gameState.skills.find(s => s.id === ach.targetSkillId);
+            if (targetSkill) currentMinutes = targetSkill.totalMinutes;
+        } else {
+            currentMinutes = gameState.skills.filter(s => s.type === ach.targetType).reduce((sum, s) => sum + s.totalMinutes, 0);
+        }
+
+        if (currentMinutes >= ach.targetMinutes) {
+            gameState.unlockedAchievements.push(ach.id);
+            gameState.activeTitle = ach.rewardTitle; 
+        }
+    });
+}
+
 function initDragAndDrop() {
     const container = document.getElementById('skills-container-list');
+    if (!container) return;
     const cards = container.querySelectorAll('.skill-card');
     
     cards.forEach(card => {
@@ -315,6 +350,7 @@ function initDragAndDrop() {
     });
 }
 
+// Поиск позиции для вставки карточки при переносе
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll('.skill-card:not(.dragging)')];
     return draggableElements.reduce((closest, child) => {
@@ -373,6 +409,7 @@ function buyItem(itemId) {
     save();
 }
 
+// Экипировка шапки
 function toggleEquip(itemId) {
     gameState.equippedHead = (gameState.equippedHead === itemId) ? null : itemId;
     renderAll();
@@ -529,13 +566,59 @@ function renderAll() {
         skillsContainer.appendChild(card);
     });
 
+    // РЕНДЕР ЦЕЛИ АЧИВКИ НА ПАНЕЛИ ПРОФИЛЯ
     const achPinned = achievementsDatabase[gameState.pinnedAchId];
     if (achPinned) {
         document.getElementById('pinned-ach-title').innerText = achPinned.title;
-        let groupMinutes = gameState.skills.filter(s => s.type === achPinned.targetType).reduce((sum, s) => sum + s.totalMinutes, 0);
-        document.getElementById('pinned-ach-progress').innerText = `${groupMinutes}/${achPinned.targetMinutes} мин`;
-        let pct = (groupMinutes / achPinned.targetMinutes) * 100;
+        let currentMinutes = 0;
+        if (achPinned.targetSkillId) {
+            const targetSkill = gameState.skills.find(s => s.id === achPinned.targetSkillId);
+            if (targetSkill) currentMinutes = targetSkill.totalMinutes;
+        } else {
+            currentMinutes = gameState.skills.filter(s => s.type === achPinned.targetType).reduce((sum, s) => sum + s.totalMinutes, 0);
+        }
+        document.getElementById('pinned-ach-progress').innerText = `${currentMinutes}/${achPinned.targetMinutes} мин`;
+        let pct = (currentMinutes / achPinned.targetMinutes) * 100;
         document.getElementById('pinned-ach-bar').style.width = `${Math.min(pct, 100)}%`;
+    }
+
+    // РЕНДЕР ВКЛАДКИ АЧИВОК (Починили отображение в основном меню)
+    const achTabContainer = document.getElementById('achievements-list-container');
+    if (achTabContainer) {
+        achTabContainer.innerHTML = '';
+        Object.keys(achievementsDatabase).forEach(key => {
+            const ach = achievementsDatabase[key];
+            let currentMinutes = 0;
+            
+            if (ach.targetSkillId) {
+                const targetSkill = gameState.skills.find(s => s.id === ach.targetSkillId);
+                if (targetSkill) currentMinutes = targetSkill.totalMinutes;
+            } else {
+                currentMinutes = gameState.skills.filter(s => s.type === ach.targetType).reduce((sum, s) => sum + s.totalMinutes, 0);
+            }
+            
+            const isCompleted = currentMinutes >= ach.targetMinutes;
+            const card = document.createElement('div');
+            card.className = 'ach-card';
+            card.style.border = isCompleted ? '4px solid #ffd700' : '4px solid #000';
+            card.style.opacity = isCompleted ? '1' : '0.6';
+            
+            card.innerHTML = `
+                <div class="item-info">
+                    <span class="ach-name" style="${isCompleted ? 'color: #ffd700;' : ''}">
+                        ${isCompleted ? '🏆' : '🔒'} ${ach.title}
+                    </span>
+                    <span class="ach-desc">${ach.desc}</span>
+                    <div style="font-size: 9px; color: #aaa; margin-top: 4px;">
+                        Прогресс: ${currentMinutes}/${ach.targetMinutes} мин
+                    </div>
+                </div>
+                <div>
+                    ${isCompleted ? '<span style="color:#00ff55; font-size:10px;">ВЫПОЛНЕНО</span>' : '<span style="color:#ff3355; font-size:10px;">В ПРОЦЕССЕ</span>'}
+                </div>
+            `;
+            achTabContainer.appendChild(card);
+        });
     }
 
     const shopBox = document.getElementById('shop-list');
