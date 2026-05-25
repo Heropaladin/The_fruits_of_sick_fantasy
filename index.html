@@ -146,10 +146,14 @@
 
             <section id="tab-skills" class="tab-main-content pixel-box">
                 <div class="skills-header">
-                    <h3 id="toggle-skills-btn" class="collapsible-trigger">🛠️ ТВОИ НАВЫКИ <span class="skills-hint-desktop">(перетаскивание)</span> <span id="collapse-arrow">▼</span></h3>
+                    <div id="toggle-skills-btn" class="skills-header-title-row collapsible-trigger" role="button" tabindex="0">
+                        <span class="skills-title-text">🛠️ ТВОИ НАВЫКИ</span>
+                        <span id="collapse-arrow" class="collapse-arrow">▼</span>
+                    </div>
+                    <p class="skills-drag-hint">⠿ Тяни за ручку слева — меняй порядок навыков и квестов</p>
                     <div class="skills-header-buttons">
-                        <button class="btn-info-grades" onclick="openGradesModal()">ℹ️ РАНГИ</button>
-                        <button class="btn-add-skill" onclick="openNewSkillModal()">+ СОЗДАТЬ НАВЫК</button>
+                        <button type="button" class="btn-info-grades" onclick="openGradesModal()">ℹ️ РАНГИ</button>
+                        <button type="button" class="btn-add-skill" onclick="openNewSkillModal()">+ СОЗДАТЬ НАВЫК</button>
                     </div>
                 </div>
                 

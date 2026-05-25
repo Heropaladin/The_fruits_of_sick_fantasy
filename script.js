@@ -163,9 +163,198 @@ function applyHatPosition() {
     hatLayer.style.transform = 'translateX(-50%)';
 }
 
+function normalizeQuestPeriod(period) {
+    return (period === 'week' || period === 'Недельный рубеж') ? 'week' : 'day';
+}
+
+function reorderSkills(draggedId, targetId) {
+    const skills = gameState.skills;
+    let from = skills.findIndex(s => s.id === draggedId);
+    let to = skills.findIndex(s => s.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const [item] = skills.splice(from, 1);
+    if (from < to) to -= 1;
+    skills.splice(to, 0, item);
+    renderAll();
+    save();
+}
+
+function reorderQuest(draggedId, targetId, listPeriod) {
+    const tasks = [...(gameState.customTasks || [])];
+    const fromIdx = tasks.findIndex(q => q.id === draggedId);
+    if (fromIdx < 0) return;
+    const [quest] = tasks.splice(fromIdx, 1);
+    quest.period = normalizeQuestPeriod(listPeriod);
+
+    if (targetId) {
+        let toIdx = tasks.findIndex(q => q.id === targetId);
+        if (toIdx < 0) tasks.push(quest);
+        else {
+            if (fromIdx < toIdx) toIdx -= 1;
+            tasks.splice(toIdx, 0, quest);
+        }
+    } else {
+        const p = quest.period;
+        let insertAt = tasks.length;
+        for (let i = tasks.length - 1; i >= 0; i--) {
+            if (normalizeQuestPeriod(tasks[i].period) === p) {
+                insertAt = i + 1;
+                break;
+            }
+        }
+        tasks.splice(insertAt, 0, quest);
+    }
+    gameState.customTasks = tasks;
+    renderAll();
+    save();
+}
+
+function clearDragHighlight() {
+    document.querySelectorAll('.dragging, .drag-over, .drag-over-list').forEach(el => {
+        el.classList.remove('dragging', 'drag-over', 'drag-over-list');
+    });
+}
+
+function initSortableDnD() {
+    if (initSortableDnD._ready) return;
+    initSortableDnD._ready = true;
+
+    document.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.drag-handle');
+        if (!handle) return;
+        const item = handle.closest('[data-skill-id], [data-quest-id]');
+        if (!item) return;
+        const id = item.dataset.skillId || item.dataset.questId;
+        const type = item.dataset.skillId ? 'skill' : 'quest';
+        e.dataTransfer.setData('application/x-sort-id', id);
+        e.dataTransfer.setData('application/x-sort-type', type);
+        e.dataTransfer.effectAllowed = 'move';
+        item.classList.add('dragging');
+    });
+
+    document.addEventListener('dragend', clearDragHighlight);
+
+    document.addEventListener('dragover', (e) => {
+        const zone = e.target.closest('.skill-card, .quest-card, .list-holder, #skills-container-list');
+        if (!zone) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.drag-over, .drag-over-list').forEach(el => {
+            el.classList.remove('drag-over', 'drag-over-list');
+        });
+        if (zone.id === 'skills-container-list' || zone.classList.contains('list-holder')) {
+            zone.classList.add('drag-over-list');
+        } else {
+            zone.classList.add('drag-over');
+        }
+    });
+
+    document.addEventListener('drop', (e) => {
+        const card = e.target.closest('.skill-card, .quest-card');
+        const listHolder = e.target.closest('.list-holder');
+        const skillsList = e.target.closest('#skills-container-list');
+        if (!card && !listHolder && !skillsList) return;
+
+        e.preventDefault();
+        clearDragHighlight();
+
+        const draggedId = e.dataTransfer.getData('application/x-sort-id');
+        const type = e.dataTransfer.getData('application/x-sort-type');
+        if (!draggedId) return;
+
+        if (type === 'skill') {
+            if (card?.dataset.skillId) {
+                reorderSkills(draggedId, card.dataset.skillId);
+            }
+            return;
+        }
+
+        if (type === 'quest') {
+            const holder = listHolder || card?.closest('.list-holder');
+            const period = holder?.id === 'list-week' ? 'week' : 'day';
+            if (card?.dataset.questId) {
+                reorderQuest(draggedId, card.dataset.questId, period);
+            } else if (holder) {
+                reorderQuest(draggedId, null, period);
+            }
+        }
+    });
+
+    // Сенсорные экраны: перетаскивание за ручку
+    let pointerSort = null;
+
+    document.addEventListener('pointerdown', (e) => {
+        const handle = e.target.closest('.drag-handle');
+        if (!handle || e.button !== 0) return;
+        const item = handle.closest('[data-skill-id], [data-quest-id]');
+        if (!item) return;
+        pointerSort = {
+            id: item.dataset.skillId || item.dataset.questId,
+            type: item.dataset.skillId ? 'skill' : 'quest',
+            item
+        };
+        item.classList.add('dragging');
+        handle.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    });
+
+    document.addEventListener('pointermove', (e) => {
+        if (!pointerSort) return;
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        clearDragHighlight();
+        pointerSort.item.classList.add('dragging');
+        const hover = under?.closest('.skill-card, .quest-card, .list-holder');
+        if (hover) {
+            if (hover.id === 'skills-container-list' || hover.classList.contains('list-holder')) {
+                hover.classList.add('drag-over-list');
+            } else {
+                hover.classList.add('drag-over');
+            }
+        }
+    });
+
+    document.addEventListener('pointerup', (e) => {
+        if (!pointerSort) return;
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        const { id, type } = pointerSort;
+        pointerSort = null;
+        clearDragHighlight();
+
+        const card = under?.closest('.skill-card, .quest-card');
+        const listHolder = under?.closest('.list-holder');
+
+        if (type === 'skill' && card?.dataset.skillId) {
+            reorderSkills(id, card.dataset.skillId);
+        } else if (type === 'quest') {
+            const holder = listHolder || card?.closest('.list-holder');
+            const period = holder?.id === 'list-week' ? 'week' : 'day';
+            if (card?.dataset.questId) {
+                reorderQuest(id, card.dataset.questId, period);
+            } else if (holder) {
+                reorderQuest(id, null, period);
+            }
+        }
+    });
+
+    document.addEventListener('pointercancel', () => {
+        pointerSort = null;
+        clearDragHighlight();
+    });
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
+    initSortableDnD();
+
     const toggleSkillsBtn = document.getElementById('toggle-skills-btn');
-    if (toggleSkillsBtn) toggleSkillsBtn.addEventListener('click', toggleSkillsCollapse);
+    if (toggleSkillsBtn) {
+        toggleSkillsBtn.addEventListener('click', toggleSkillsCollapse);
+        toggleSkillsBtn.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleSkillsCollapse();
+            }
+        });
+    }
 
     const heroImg = document.getElementById('hero-img-base');
     if (heroImg) {
@@ -729,15 +918,19 @@ function renderAll() {
             const isThisTimerRunning = (activeTimerId === skill.id);
             const card = document.createElement('div');
             card.className = 'skill-card';
+            card.dataset.skillId = skill.id;
             card.innerHTML = `
-                <div class="skill-top-row">
-                    <span class="skill-title">${skill.title}</span>
-                    <span class="skill-status">${grade}</span>
+                <span class="drag-handle" draggable="true" title="Перетащить навык" aria-label="Перетащить">⠿</span>
+                <div class="skill-card-body">
+                    <div class="skill-top-row">
+                        <span class="skill-title">${skill.title}</span>
+                        <span class="skill-status">${grade}</span>
+                    </div>
+                    <div class="skill-progress-text">Пройдено: ${skill.totalMinutes} мин${isThisTimerRunning ? ` (${secondsCountdown}с)` : ''}</div>
+                    <button type="button" class="btn-timer ${isThisTimerRunning ? 'active' : ''}" onclick="toggleSkillTimer('${skill.id}')">
+                        ${isThisTimerRunning ? '⏹️ СТОП' : '▶️ СТАРТ'}
+                    </button>
                 </div>
-                <div class="skill-progress-text">Пройдено: ${skill.totalMinutes} мин${isThisTimerRunning ? ` (${secondsCountdown}с)` : ''}</div>
-                <button type="button" class="btn-timer ${isThisTimerRunning ? 'active' : ''}" onclick="toggleSkillTimer('${skill.id}')">
-                    ${isThisTimerRunning ? '⏹️ СТОП' : '▶️ СТАРТ'}
-                </button>
             `;
             skillsContainer.appendChild(card);
         });
@@ -859,7 +1052,9 @@ function renderQuestLists() {
     const appendQuest = (container, quest) => {
         const qEl = document.createElement('div');
         qEl.className = 'quest-card';
+        qEl.dataset.questId = quest.id;
         qEl.innerHTML = `
+            <span class="drag-handle" draggable="true" title="Перетащить квест" aria-label="Перетащить">⠿</span>
             <div class="quest-info">
                 <div class="quest-title">${quest.text}</div>
                 <div class="quest-reward">+${quest.rewardXp} XP · +${quest.rewardGold} ${CURRENCY_ICON}</div>
